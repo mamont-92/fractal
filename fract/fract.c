@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <complex.h>
 #include <windows.h>
 
@@ -9,6 +8,8 @@ void onKeyDown();
 void generatePalette();
 void initFractBitmap();
 void releaseResources();
+
+HANDLE hHeap;
 
 HWND hWnd;
 HDC hDCWnd;
@@ -79,8 +80,8 @@ void onDraw()
 			REAL(z) = ((i - midY) * fract_scale);
 			IMAG(z) = ((j - midX) * fract_scale);
 
-			re_z = creal(z);
-			im_z = cimag(z);
+			re_z = REAL(z);
+			im_z = IMAG(z);
 			abs_z = cabs(z);
 
 			for (int k = 0; (re_z < fract_rng || im_z < fract_rng || abs_z < fract_rng) && k < fract_iter_max; k++) {
@@ -88,8 +89,8 @@ void onDraw()
 				REAL(z) = REAL(z) + REAL(constant);
 				IMAG(z) = IMAG(z) + IMAG(constant);
 
-				re_z = fabs(creal(z));
-				im_z = fabs(cimag(z));
+				re_z = fabs(REAL(z));
+				im_z = fabs(IMAG(z));
 				abs_z = cabs(z);
 			}
 
@@ -183,6 +184,9 @@ int APIENTRY wWinMain(
 	}
 	
 	ShowWindow(hWnd, SW_SHOW);
+
+	hHeap = HeapCreate(0, 0x01000, 0);
+
 	generatePalette();
 	initFractBitmap();
 	
@@ -264,7 +268,8 @@ void onKeyDown()
 void generatePalette()
 {
 	int len = MAX_PALETTE_CLR;
-	palette = malloc(sizeof(pltClr)*MAX_PALETTE_CLR);
+	long size = (long)MAX_PALETTE_CLR * sizeof(pltClr);
+	palette = (unsigned char*)HeapAlloc(hHeap, 0, size);
 
 	float rHalf = 23.0 / 2.0;
 	float gHalf = 11.0 / 2.0;
@@ -302,11 +307,13 @@ void initFractBitmap()
 	fract_bitmap.bmiColors[0].rgbBlue = 255;
 	fract_bitmap.bmiColors[0].rgbGreen = 255;
 
-	fract_bits = malloc((long)wnd_width * (long)wnd_height * (long)3*sizeof(char));
+	long size = (long)wnd_width * (long)wnd_height * (long)3 * sizeof(char);
+	fract_bits = (unsigned char*)HeapAlloc(hHeap, 0, size);
 }
 
 void releaseResources()
 {
-	free(fract_bits);
-	free(palette);
+	HeapFree(hHeap, 0, fract_bits);
+	HeapFree(hHeap, 0, palette);
+	HeapDestroy(hHeap);
 }
