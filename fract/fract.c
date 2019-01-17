@@ -1,12 +1,14 @@
+#include <stdio.h>
+#include <complex.h>
 #include <windows.h>
-#include <complex>
+
 
 void onDraw();
 void onTimer();
 void onKeyDown();
 void generatePalette();
 void initFractBitmap();
-void releaseBitmap();
+void releaseResources();
 
 HWND hWnd;
 HDC hDCWnd;
@@ -41,11 +43,11 @@ BITMAPINFO fract_bitmap;
 
 #define MAX_PALETTE_CLR 65535
 
-struct pltClr {
+struct {
 	unsigned char red;
 	unsigned char green;
 	unsigned char blue;
-};
+}typedef pltClr;
 
 pltClr * palette = NULL;
 
@@ -53,33 +55,42 @@ int horRes;
 int vertRes;
 int refresh;
 
+#define REAL(cmplx) cmplx._Val[0]
+#define IMAG(cmplx) cmplx._Val[1]
+
 void onDraw()
 {
-	#pragma omp parallel for
-	for (int i = 0; i < wnd_height; ++i) {
-		std::complex <double> z; //z будет возводиться в куб
+	int i;
 
+#pragma omp parallel for private(i)
+	for (i = 0; i < wnd_height; ++i) {
 		short midX = wnd_width >> 1;
 		short midY = wnd_height >> 1;
 
-		const std::complex <double> constant(fract_real_k, fract_img_k);
+		_Dcomplex z;
+		_Dcomplex constant = { fract_real_k , fract_img_k };
+		_Dcomplex f_power = { (double)fract_power , 0.0 };
+
 		double re_z, im_z, abs_z;
 
 		for (int j = 0; j < wnd_width; ++j) {
 			long ind = (i * wnd_width + j) * 3;
 
-			z.real((i - midY) * fract_scale);
-			z.imag((j - midX) * fract_scale);
+			REAL(z) = ((i - midY) * fract_scale);
+			IMAG(z) = ((j - midX) * fract_scale);
 
-			re_z = fabs(z.real());
-			im_z = fabs(z.imag());
-			abs_z = abs(z);
+			re_z = creal(z);
+			im_z = cimag(z);
+			abs_z = cabs(z);
 
 			for (int k = 0; (re_z < fract_rng || im_z < fract_rng || abs_z < fract_rng) && k < fract_iter_max; k++) {
-				z = pow(z, fract_power) + constant;
-				re_z = fabs(z.real());
-				im_z = fabs(z.imag());
-				abs_z = abs(z);
+				z = cpow(z, f_power);
+				REAL(z) = REAL(z) + REAL(constant);
+				IMAG(z) = IMAG(z) + IMAG(constant);
+
+				re_z = fabs(creal(z));
+				im_z = fabs(cimag(z));
+				abs_z = cabs(z);
 			}
 
 			double val = log(abs_z + 1.0);
@@ -93,7 +104,7 @@ void onDraw()
 	
 	if (!SetDIBitsToDevice(hDCWnd, 0, 0, wnd_width, wnd_height, 0, 0, 0, wnd_height, fract_bits, &fract_bitmap, DIB_RGB_COLORS))
 	{
-		MessageBox(NULL, "Water bits error ", wnd_errCapt, MB_OK);
+		MessageBox(NULL, "bitmap bits error ", wnd_errCapt, MB_OK);
 	}
 
 }
@@ -171,7 +182,6 @@ int APIENTRY wWinMain(
 		return 1;
 	}
 	
-		
 	ShowWindow(hWnd, SW_SHOW);
 	generatePalette();
 	initFractBitmap();
@@ -184,7 +194,7 @@ int APIENTRY wWinMain(
 		DispatchMessage(&msg);
 	}
 
-	releaseBitmap();
+	releaseResources();
 	restoreResolution();
 
 	return 0;
@@ -254,14 +264,14 @@ void onKeyDown()
 void generatePalette()
 {
 	int len = MAX_PALETTE_CLR;
-	palette = new pltClr[MAX_PALETTE_CLR];
+	palette = malloc(sizeof(pltClr)*MAX_PALETTE_CLR);
 
 	float rHalf = 23.0 / 2.0;
-	float gHalf = 11 / 2.0;
-	float bHalf = 7 / 2.0;
+	float gHalf = 11.0 / 2.0;
+	float bHalf = 7.0 / 2.0;
 
 	for (int i = 0; i < len; ++i) {
-		int redVal = i % 17;
+		int redVal = i % 23;
 		int grenVal = i % 11;
 		int blueVal = i % 7;
 
@@ -292,10 +302,11 @@ void initFractBitmap()
 	fract_bitmap.bmiColors[0].rgbBlue = 255;
 	fract_bitmap.bmiColors[0].rgbGreen = 255;
 
-	fract_bits = new unsigned char[(long)wnd_width * (long)wnd_height * (long)3];
+	fract_bits = malloc((long)wnd_width * (long)wnd_height * (long)3*sizeof(char));
 }
 
-void releaseBitmap()
+void releaseResources()
 {
-	delete[] fract_bits;
+	free(fract_bits);
+	free(palette);
 }
