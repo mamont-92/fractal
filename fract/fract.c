@@ -4,15 +4,14 @@
 
 #include "complex_fpu.h"
 
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
 
 void onDraw();
 void onTimer();
-void onKeyDown();
 void generatePalette();
 void initFractBitmap();
-void releaseResources();
 
 HANDLE hHeap;
 
@@ -61,11 +60,6 @@ int horRes;
 int vertRes;
 int refresh;
 
-//#define REAL(cmplx) cmplx._Val[0]
-//#define IMAG(cmplx) cmplx._Val[1]
-
-
-
 
 void onDraw()
 {
@@ -83,8 +77,6 @@ void onDraw()
 		float re_z, im_z, abs_z;
 
 		for (int j = 0; j < wnd_width; ++j) {
-			
-
 			long ind = (i * wnd_width + j) * 3;
 
 			REAL(z) = ((i - midY) * fract_scale);
@@ -104,15 +96,8 @@ void onDraw()
 			}
 
 			float fabs_z = abs_z + 1.0;
-
-			float val = fpu_log2x(fabs_z);
-
-			//float val = log2_fpu(fabs_z, 1.0f);
-
-			//float val =  fpu_log2x(fabs_z);
-//			double val = ind;
-			//unsigned long int clr_ind = (unsigned long)val % MAX_PALETTE_CLR;
-			unsigned long int clr_ind = fpu_f_to_i(val) % MAX_PALETTE_CLR;//(unsigned long)val % MAX_PALETTE_CLR;
+			float val = fpu_ln(fabs_z);
+			unsigned long int clr_ind = fpu_f_to_i(val) % MAX_PALETTE_CLR;
 
 			fract_bits[ind] = palette[clr_ind].red;
 			fract_bits[ind + 1] = palette[clr_ind].green;
@@ -120,12 +105,7 @@ void onDraw()
 		}
 	}
 	
-	if (!SetDIBitsToDevice(hDCWnd, 0, 0, wnd_width, wnd_height, 0, 0, 0, wnd_height, fract_bits, &fract_bitmap, DIB_RGB_COLORS))
-	{
-		//MessageBox(NULL, "bitmap bits error ", wnd_errCapt, MB_OK);
-		return;
-	}
-
+	SetDIBitsToDevice(hDCWnd, 0, 0, wnd_width, wnd_height, 0, 0, 0, wnd_height, fract_bits, &fract_bitmap, DIB_RGB_COLORS);
 }
 
 void setResolution()
@@ -191,13 +171,10 @@ int APIENTRY wWinMain(
 	windowclass.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 
 	if (!RegisterClassEx(&windowclass)){
-		//MessageBox(NULL, "Can't register window class !", wnd_errCapt, MB_OK);
 		return 1;
 	}
-	//hWnd = CreateWindow(wnd_className, "Fract", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, 0, 0, wndWidth, wndHeight, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
 	hWnd = CreateWindowA(wnd_className, "F", WS_POPUP | WS_VISIBLE, 0, 0, wnd_width, wnd_height, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
 	if (!hWnd){
-		//MessageBox(NULL, "Can't create windows", wnd_errCapt, MB_OK);
 		return 1;
 	}
 	
@@ -216,8 +193,13 @@ int APIENTRY wWinMain(
 		DispatchMessage(&msg);
 	}
 
-	releaseResources();
+	HeapFree(hHeap, 0, fract_bits);
+	HeapFree(hHeap, 0, palette);
+	HeapDestroy(hHeap);
+
 	restoreResolution();
+
+	ExitProcess(0);
 
 	return 0;
 }
@@ -246,16 +228,14 @@ LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lPara
 		onTimer();
 		break;
 	case WM_KEYDOWN:
-		CurrKey = (int)wParam;
-		onKeyDown();
+		if((int)wParam ==27);
+			SendMessage(hWnd, WM_CLOSE, 0, 0);
 		break;
 	default:
 		return DefWindowProc(hWindow, uMsg, wParam, lParam);
 	}
 	return 0;
 }
-
-
 
 void onTimer() {
 	fract_power += fract_dpower;
@@ -266,21 +246,6 @@ void onTimer() {
 		fract_dscale = -fract_dscale;
 	}
 	InvalidateRect(hWnd, NULL, 0);
-}
-
-void exit()
-{
-	SendMessage(hWnd, WM_CLOSE, 0, 0);
-}
-
-void onKeyDown()
-{
-	switch (CurrKey)
-	{
-	case 27:
-		exit();
-		break;
-	}
 }
 
 void generatePalette()
@@ -328,11 +293,4 @@ void initFractBitmap()
 
 	long size = (long)wnd_width * (long)wnd_height * (long)3 * sizeof(char);
 	fract_bits = (unsigned char*)HeapAlloc(hHeap, 0, size);
-}
-
-void releaseResources()
-{
-	HeapFree(hHeap, 0, fract_bits);
-	HeapFree(hHeap, 0, palette);
-	HeapDestroy(hHeap);
 }
