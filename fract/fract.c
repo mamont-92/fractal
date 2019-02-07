@@ -1,4 +1,9 @@
-#include <complex.h>
+#pragma comment(linker, "/MERGE:.data=.text")
+#pragma comment(linker, "/MERGE:.rdata=.text")
+#pragma comment(linker, "/SECTION:.text,EWR")
+
+#include "complex_fpu.h"
+
 #include <windows.h>
 
 
@@ -14,10 +19,10 @@ HANDLE hHeap;
 HWND hWnd;
 HDC hDCWnd;
 
-#define wnd_errCapt "Error"
+#define wnd_errCapt "Er"
 unsigned short wnd_width = 800;
 unsigned short wnd_height = 600;
-char wnd_className[] = "wndClass";
+char wnd_className[] = "wc";
 
 LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -30,7 +35,7 @@ int CurrKey = 0;
 #define fract_img_k		0.0001f
 #define fract_rng		50.0f
 #define fract_iter_max	10
-#define fract_power_max	10.0f
+#define fract_power_max	8.0f
 #define fract_power_min	2.0f
 
 float fract_power = 2.0f;
@@ -56,8 +61,11 @@ int horRes;
 int vertRes;
 int refresh;
 
-#define REAL(cmplx) cmplx._Val[0]
-#define IMAG(cmplx) cmplx._Val[1]
+//#define REAL(cmplx) cmplx._Val[0]
+//#define IMAG(cmplx) cmplx._Val[1]
+
+
+
 
 void onDraw()
 {
@@ -68,13 +76,15 @@ void onDraw()
 		short midX = wnd_width >> 1;
 		short midY = wnd_height >> 1;
 
-		_Dcomplex z;
-		_Dcomplex constant = { fract_real_k , fract_img_k };
-		_Dcomplex f_power = { (double)fract_power , 0.0 };
+		_Fcomplex z;
+		_Fcomplex constant = { fract_real_k , fract_img_k };
+		_Fcomplex f_power = { (double)fract_power , 0.0 };
 
-		double re_z, im_z, abs_z;
+		float re_z, im_z, abs_z;
 
 		for (int j = 0; j < wnd_width; ++j) {
+			
+
 			long ind = (i * wnd_width + j) * 3;
 
 			REAL(z) = ((i - midY) * fract_scale);
@@ -82,22 +92,29 @@ void onDraw()
 
 			re_z = REAL(z);
 			im_z = IMAG(z);
-			abs_z = cabs(z);
+			abs_z = fpu_cabs(z);
 
 			for (int k = 0; (re_z < fract_rng || im_z < fract_rng || abs_z < fract_rng) && k < fract_iter_max; k++) {
-				z = cpow(z, f_power);
-				REAL(z) = REAL(z) + REAL(constant);
-				IMAG(z) = IMAG(z) + IMAG(constant);
+				z = fpu_complex_pow(z, f_power);
+				ADD(z, constant);
 
-				re_z = fabs(REAL(z));
-				im_z = fabs(IMAG(z));
-				abs_z = cabs(z);
+				re_z = fpu_fabs(REAL(z));
+				im_z = fpu_fabs(IMAG(z));
+				abs_z = fpu_cabs(z);
 			}
 
-			double val = log(abs_z + 1.0);
-			unsigned long int clr_ind = (unsigned long)val % MAX_PALETTE_CLR;
+			float fabs_z = abs_z + 1.0;
 
-			fract_bits[ind + 0] = palette[clr_ind].red;
+			float val = fpu_log2x(fabs_z);
+
+			//float val = log2_fpu(fabs_z, 1.0f);
+
+			//float val =  fpu_log2x(fabs_z);
+//			double val = ind;
+			//unsigned long int clr_ind = (unsigned long)val % MAX_PALETTE_CLR;
+			unsigned long int clr_ind = fpu_f_to_i(val) % MAX_PALETTE_CLR;//(unsigned long)val % MAX_PALETTE_CLR;
+
+			fract_bits[ind] = palette[clr_ind].red;
 			fract_bits[ind + 1] = palette[clr_ind].green;
 			fract_bits[ind + 2] = palette[clr_ind].blue;
 		}
@@ -105,7 +122,8 @@ void onDraw()
 	
 	if (!SetDIBitsToDevice(hDCWnd, 0, 0, wnd_width, wnd_height, 0, 0, 0, wnd_height, fract_bits, &fract_bitmap, DIB_RGB_COLORS))
 	{
-		MessageBox(NULL, "bitmap bits error ", wnd_errCapt, MB_OK);
+		//MessageBox(NULL, "bitmap bits error ", wnd_errCapt, MB_OK);
+		return;
 	}
 
 }
@@ -173,13 +191,13 @@ int APIENTRY wWinMain(
 	windowclass.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 
 	if (!RegisterClassEx(&windowclass)){
-		MessageBox(NULL, "Can't register window class !", wnd_errCapt, MB_OK);
+		//MessageBox(NULL, "Can't register window class !", wnd_errCapt, MB_OK);
 		return 1;
 	}
 	//hWnd = CreateWindow(wnd_className, "Fract", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, 0, 0, wndWidth, wndHeight, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
-	hWnd = CreateWindowA(wnd_className, "Fract", WS_POPUP | WS_VISIBLE, 0, 0, wnd_width, wnd_height, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
+	hWnd = CreateWindowA(wnd_className, "F", WS_POPUP | WS_VISIBLE, 0, 0, wnd_width, wnd_height, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
 	if (!hWnd){
-		MessageBox(NULL, "Can't create windows", wnd_errCapt, MB_OK);
+		//MessageBox(NULL, "Can't create windows", wnd_errCapt, MB_OK);
 		return 1;
 	}
 	
@@ -268,21 +286,22 @@ void onKeyDown()
 void generatePalette()
 {
 	int len = MAX_PALETTE_CLR;
-	long size = (long)MAX_PALETTE_CLR * sizeof(pltClr);
+	long size = (long)(MAX_PALETTE_CLR+1) * sizeof(pltClr);
 	palette = (unsigned char*)HeapAlloc(hHeap, 0, size);
 
 	float rHalf = 23.0 / 2.0;
-	float gHalf = 11.0 / 2.0;
-	float bHalf = 7.0 / 2.0;
+	float gHalf = 13.0 / 2.0;
+	float bHalf = 9.0 / 2.0;
+
 
 	for (int i = 0; i < len; ++i) {
 		int redVal = i % 23;
 		int grenVal = i % 11;
 		int blueVal = i % 7;
 
-		float rVal = fabs((float)redVal - rHalf) / rHalf * 255.0;
-		float gVal = fabs((float)grenVal - gHalf) / gHalf * 255.0;
-		float bVal = fabs((float)blueVal - bHalf) / bHalf * 255.0;
+		float rVal = fpu_fabs((float)redVal - rHalf) / rHalf * 255;
+		float gVal = fpu_fabs((float)grenVal - gHalf) / gHalf * 255;
+		float bVal = fpu_fabs((float)blueVal - bHalf) / bHalf * 255;
 
 		redVal = max(min((int)rVal, 255), 0);
 		grenVal = max(min((int)gVal, 255), 0);
