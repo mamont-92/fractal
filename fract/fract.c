@@ -19,8 +19,8 @@ HWND hWnd;
 HDC hDCWnd;
 
 #define wnd_errCapt "Er"
-unsigned short wnd_width = 800;
-unsigned short wnd_height = 600;
+#define WND_WIDTH  800
+#define WND_HEIGHT 600
 char wnd_className[] = "wc";
 
 LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -33,7 +33,7 @@ int CurrKey = 0;
 #define fract_real_k	1.07f
 #define fract_img_k		0.0001f
 #define fract_rng		50.0f
-#define fract_iter_max	10
+#define fract_iter_max	20
 #define fract_power_max	8.0f
 #define fract_power_min	2.0f
 
@@ -56,9 +56,9 @@ struct {
 
 pltClr * palette = NULL;
 
-int horRes;
-int vertRes;
-int refresh;
+#define R_W 13
+#define G_W 11
+#define B_W 7
 
 
 void onDraw()
@@ -66,9 +66,9 @@ void onDraw()
 	int i;
 
 #pragma omp parallel for private(i)
-	for (i = 0; i < wnd_height; ++i) {
-		short midX = wnd_width >> 1;
-		short midY = wnd_height >> 1;
+	for (i = 0; i < WND_HEIGHT; ++i) {
+		short midX = WND_WIDTH >> 1;
+		short midY = WND_HEIGHT >> 1;
 
 		_Fcomplex z;
 		_Fcomplex constant = { fract_real_k , fract_img_k };
@@ -76,8 +76,8 @@ void onDraw()
 
 		float re_z, im_z, abs_z;
 
-		for (int j = 0; j < wnd_width; ++j) {
-			long ind = (i * wnd_width + j) * 3;
+		for (int j = 0; j < WND_WIDTH; ++j) {
+			long ind = (i * WND_WIDTH + j) * 3;
 
 			REAL(z) = ((i - midY) * fract_scale);
 			IMAG(z) = ((j - midX) * fract_scale);
@@ -86,7 +86,7 @@ void onDraw()
 			im_z = IMAG(z);
 			abs_z = fpu_cabs(z);
 
-			for (int k = 0; (re_z < fract_rng || im_z < fract_rng || abs_z < fract_rng) && k < fract_iter_max; k++) {
+			for (int k = 0; (re_z < fract_rng || im_z < fract_rng || abs_z < fract_rng) && (k < fract_iter_max); k++) {
 				z = fpu_complex_pow(z, f_power);
 				ADD(z, constant);
 
@@ -95,7 +95,7 @@ void onDraw()
 				abs_z = fpu_cabs(z);
 			}
 
-			float fabs_z = abs_z + 1.0;
+			float fabs_z = abs_z + 1.0f;
 			float val = fpu_ln(fabs_z);
 			unsigned long int clr_ind = fpu_f_to_i(val) % MAX_PALETTE_CLR;
 
@@ -105,43 +105,7 @@ void onDraw()
 		}
 	}
 	
-	SetDIBitsToDevice(hDCWnd, 0, 0, wnd_width, wnd_height, 0, 0, 0, wnd_height, fract_bits, &fract_bitmap, DIB_RGB_COLORS);
-}
-
-void setResolution()
-{
-	HDC hDCScreen = GetDC(NULL);
-	horRes = GetDeviceCaps(hDCScreen, HORZRES);
-	vertRes = GetDeviceCaps(hDCScreen, VERTRES);
-	refresh = GetDeviceCaps(hDCScreen, VREFRESH);
-	ReleaseDC(NULL, hDCScreen);
-	
-	DEVMODE DM;
-	DM.dmSize = sizeof(DEVMODE);
-	DM.dmBitsPerPel = 32; 
-	DM.dmPelsWidth = wnd_width;
-	DM.dmPelsHeight = wnd_height;
-	DM.dmFields = DM_BITSPERPEL +
-		DM_PELSWIDTH +
-		DM_PELSHEIGHT +
-		DM_DISPLAYFREQUENCY;
-	DM.dmDisplayFrequency = refresh; // частота обновления экрана
-	ChangeDisplaySettings(&DM, 0);
-}
-
-void restoreResolution()
-{
-	DEVMODE DM;
-	DM.dmSize = sizeof(DEVMODE);
-	DM.dmBitsPerPel = 32; 
-	DM.dmPelsWidth = horRes; 
-	DM.dmPelsHeight = vertRes; 
-	DM.dmFields = DM_BITSPERPEL +
-		DM_PELSWIDTH +
-		DM_PELSHEIGHT +
-		DM_DISPLAYFREQUENCY;
-	DM.dmDisplayFrequency = refresh; // частота обновления экрана
-	ChangeDisplaySettings(&DM, 0);
+	SetDIBitsToDevice(hDCWnd, 0, 0, WND_WIDTH, WND_HEIGHT, 0, 0, 0, WND_HEIGHT, fract_bits, &fract_bitmap, DIB_RGB_COLORS);
 }
 
 int APIENTRY wWinMain(
@@ -151,11 +115,30 @@ int APIENTRY wWinMain(
 	_In_ int       nCmdShow
 )
 {
-	setResolution();
-
+	DEVMODE savedScreenParams, targetScreenParams;
 	MSG msg;
-
 	WNDCLASSEX windowclass;
+	HDC hDCScreen = GetDC(NULL);
+
+	savedScreenParams.dmSize = sizeof(DEVMODE);
+	savedScreenParams.dmBitsPerPel = GetDeviceCaps(hDCScreen, BITSPIXEL)
+		* GetDeviceCaps(hDCScreen, PLANES);
+	savedScreenParams.dmPelsWidth = GetDeviceCaps(hDCScreen, HORZRES);
+	savedScreenParams.dmPelsHeight = GetDeviceCaps(hDCScreen, VERTRES);
+	savedScreenParams.dmDisplayFrequency = GetDeviceCaps(hDCScreen, VREFRESH);
+	savedScreenParams.dmFields = DM_BITSPERPEL + DM_PELSWIDTH 
+		+ DM_PELSHEIGHT + DM_DISPLAYFREQUENCY;
+	
+	targetScreenParams.dmSize = sizeof(DEVMODE);
+	targetScreenParams.dmBitsPerPel = savedScreenParams.dmBitsPerPel;
+	targetScreenParams.dmPelsWidth = WND_WIDTH;
+	targetScreenParams.dmPelsHeight = WND_HEIGHT;
+	targetScreenParams.dmDisplayFrequency = savedScreenParams.dmDisplayFrequency;
+	targetScreenParams.dmFields = DM_BITSPERPEL + DM_PELSWIDTH
+		+ DM_PELSHEIGHT + DM_DISPLAYFREQUENCY;
+
+	ChangeDisplaySettings(&targetScreenParams, 0);
+	
 
 	windowclass.cbSize = sizeof(windowclass);
 	windowclass.style = CS_HREDRAW | CS_VREDRAW;
@@ -173,7 +156,7 @@ int APIENTRY wWinMain(
 	if (!RegisterClassEx(&windowclass)){
 		return 1;
 	}
-	hWnd = CreateWindowA(wnd_className, "F", WS_POPUP | WS_VISIBLE, 0, 0, wnd_width, wnd_height, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
+	hWnd = CreateWindowA(wnd_className, "F", WS_POPUP | WS_VISIBLE, 0, 0, WND_WIDTH, WND_HEIGHT, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
 	if (!hWnd){
 		return 1;
 	}
@@ -196,9 +179,9 @@ int APIENTRY wWinMain(
 	HeapFree(hHeap, 0, fract_bits);
 	HeapFree(hHeap, 0, palette);
 	HeapDestroy(hHeap);
-
-	restoreResolution();
-
+	
+	ChangeDisplaySettings(&savedScreenParams, 0);
+	
 	ExitProcess(0);
 
 	return 0;
@@ -254,36 +237,34 @@ void generatePalette()
 	long size = (long)(MAX_PALETTE_CLR+1) * sizeof(pltClr);
 	palette = (unsigned char*)HeapAlloc(hHeap, 0, size);
 
-	float rHalf = 23.0 / 2.0;
-	float gHalf = 13.0 / 2.0;
-	float bHalf = 9.0 / 2.0;
+	float rHalf = R_W * 0.5;
+	float gHalf = G_W * 0.5;
+	float bHalf = B_W * 0.5;
 
+	float rHalfInv_mul_255 = 1.0 / rHalf * 255.0;
+	float gHalfInv_mul_255 = 1.0 / gHalf * 255.0;
+	float bHalfInv_mul_255 = 1.0 / bHalf * 255.0;
 
 	for (int i = 0; i < len; ++i) {
-		int redVal = i % 23;
-		int grenVal = i % 11;
-		int blueVal = i % 7;
+		int redVal = (i + 1) % R_W;
+		int grenVal = (i + 4) % G_W;
+		int blueVal = (i+3) % B_W;
 
-		float rVal = fpu_fabs((float)redVal - rHalf) / rHalf * 255;
-		float gVal = fpu_fabs((float)grenVal - gHalf) / gHalf * 255;
-		float bVal = fpu_fabs((float)blueVal - bHalf) / bHalf * 255;
+		float rVal = fpu_fabs((float)redVal - rHalf) * rHalfInv_mul_255;
+		float gVal = fpu_fabs((float)grenVal - gHalf) * gHalfInv_mul_255;
+		float bVal = fpu_fabs((float)blueVal - bHalf) * bHalfInv_mul_255;
 
-		redVal = max(min((int)rVal, 255), 0);
-		grenVal = max(min((int)gVal, 255), 0);
-		blueVal = max(min((int)bVal, 255), 0);
-
-		palette[i].blue = blueVal;
-		palette[i].green = grenVal;
-		palette[i].red = redVal;
+		palette[i].red = max(min((int)rVal, 255), 0);
+		palette[i].green = max(min((int)gVal, 255), 0);
+		palette[i].blue = max(min((int)bVal, 255), 0);
 	}
-
 }
 
 void initFractBitmap()
 {
 	fract_bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-	fract_bitmap.bmiHeader.biWidth = wnd_width;
-	fract_bitmap.bmiHeader.biHeight = wnd_height;
+	fract_bitmap.bmiHeader.biWidth = WND_WIDTH;
+	fract_bitmap.bmiHeader.biHeight = WND_HEIGHT;
 	fract_bitmap.bmiHeader.biPlanes = 1;
 	fract_bitmap.bmiHeader.biBitCount = 24;
 	fract_bitmap.bmiHeader.biCompression = BI_RGB;
@@ -291,6 +272,6 @@ void initFractBitmap()
 	fract_bitmap.bmiColors[0].rgbBlue = 255;
 	fract_bitmap.bmiColors[0].rgbGreen = 255;
 
-	long size = (long)wnd_width * (long)wnd_height * (long)3 * sizeof(char);
+	long size = (long)WND_WIDTH * (long)WND_HEIGHT * (long)3 * sizeof(char);
 	fract_bits = (unsigned char*)HeapAlloc(hHeap, 0, size);
 }

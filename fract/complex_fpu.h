@@ -10,25 +10,6 @@
 
 static const float half = 0.49999;
 
-
-#include <windows.h>
-
-/*double _except1(DWORD c, int a, double b, double result, DWORD z, void * p) {
-	return result;
-}*/
-
-/*float __stdcall log2_fpu(float x, float y) {
-	float res = 0.0;
-	__asm {
-		fld y
-		fld x
-		fyl2x
-
-		fstp res
-	}
-	return res;
-}*/
-
 typedef struct complex_fpu_f {
 	float _Val[2];
 } complex_fpu_f;
@@ -78,32 +59,6 @@ _declspec(naked) unsigned int __stdcall fpu_f_to_i(float x) {
 		pop eax
 
 		ret 4
-	}
-}
-
-/*float fpu_carg(_Fcomplex _Fc) {
-	float r = REAL(_Fc);
-	float i = REAL(_Fc);
-	__asm {
-		fld r
-		fld i
-		fpatan
-		fstp r
-	}
-	return r;
-}*/
-
-_declspec(naked) float __stdcall fpu_log2x(float x) {
-	__asm {
-		push    ebp
-		mov     ebp, esp
-
-		fld1
-		fld x
-		fyl2x
-
-		pop     ebp
-		ret     4
 	}
 }
 
@@ -234,22 +189,6 @@ _Fcomplex fpu_complex_pow(_Fcomplex x, _Fcomplex y) {
 	IMAG(res) = fpu_sin(a_y2lnx1y1)*e1;
 
 	return res;
-	//return x;
 }
-
-/*_Fcomplex fpu_complex_pow(_Fcomplex x, _Fcomplex y) {
-	_Fcomplex res;
-	float ln_x1y1 = log(sqrt(REAL(x)*REAL(x) + IMAG(x)*IMAG(x)));
-	float a = atan2(IMAG(x), REAL(x));
-
-	float e1 = fpu_exp(REAL(y)*ln_x1y1 - IMAG(y)*a);
-	float a_y2lnx1y1 = REAL(y) * a + IMAG(y) * ln_x1y1;
-
-	REAL(res) = fpu_cos(a_y2lnx1y1)*e1;
-	IMAG(res) = fpu_sin(a_y2lnx1y1)*e1;
-
-	return res;
-}*/
-
 
 #endif //COMPLEX_FPU
