@@ -7,6 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#define CHANGE_RESOLUTION
 
 void onDraw();
 void onTimer();
@@ -34,10 +35,10 @@ int CurrKey = 0;
 #define fract_img_k		0.0001f
 #define fract_rng		50.0f
 #define fract_iter_max	20
-#define fract_power_max	8.0f
-#define fract_power_min	2.0f
+#define fract_power_max	7.0f
+#define fract_power_min	1.5f
 
-float fract_power = 2.0f;
+float fract_power = 1.5f;
 float fract_dpower = 0.02f;
 
 float fract_scale = 0.01f;
@@ -56,9 +57,9 @@ struct {
 
 pltClr * palette = NULL;
 
-#define R_W 13
+#define R_W 17
 #define G_W 11
-#define B_W 7
+#define B_W 6
 
 
 void onDraw()
@@ -84,7 +85,7 @@ void onDraw()
 
 			re_z = REAL(z);
 			im_z = IMAG(z);
-			abs_z = fpu_cabs(z);
+			abs_z = fpu_cabs(&z);
 
 			for (int k = 0; (re_z < fract_rng || im_z < fract_rng || abs_z < fract_rng) && (k < fract_iter_max); k++) {
 				z = fpu_complex_pow(z, f_power);
@@ -92,7 +93,7 @@ void onDraw()
 
 				re_z = fpu_fabs(REAL(z));
 				im_z = fpu_fabs(IMAG(z));
-				abs_z = fpu_cabs(z);
+				abs_z = fpu_cabs(&z);
 			}
 
 			float fabs_z = abs_z + 1.0f;
@@ -120,11 +121,14 @@ int APIENTRY wWinMain(
 	WNDCLASSEX windowclass;
 	HDC hDCScreen = GetDC(NULL);
 
+	savedScreenParams.dmPelsWidth = GetDeviceCaps(hDCScreen, HORZRES);
+	savedScreenParams.dmPelsHeight = GetDeviceCaps(hDCScreen, VERTRES);
+
+#ifdef CHANGE_RESOLUTION
 	savedScreenParams.dmSize = sizeof(DEVMODE);
 	savedScreenParams.dmBitsPerPel = GetDeviceCaps(hDCScreen, BITSPIXEL)
 		* GetDeviceCaps(hDCScreen, PLANES);
-	savedScreenParams.dmPelsWidth = GetDeviceCaps(hDCScreen, HORZRES);
-	savedScreenParams.dmPelsHeight = GetDeviceCaps(hDCScreen, VERTRES);
+	
 	savedScreenParams.dmDisplayFrequency = GetDeviceCaps(hDCScreen, VREFRESH);
 	savedScreenParams.dmFields = DM_BITSPERPEL + DM_PELSWIDTH 
 		+ DM_PELSHEIGHT + DM_DISPLAYFREQUENCY;
@@ -138,7 +142,7 @@ int APIENTRY wWinMain(
 		+ DM_PELSHEIGHT + DM_DISPLAYFREQUENCY;
 
 	ChangeDisplaySettings(&targetScreenParams, 0);
-	
+#endif
 
 	windowclass.cbSize = sizeof(windowclass);
 	windowclass.style = CS_HREDRAW | CS_VREDRAW;
@@ -156,7 +160,17 @@ int APIENTRY wWinMain(
 	if (!RegisterClassEx(&windowclass)){
 		return 1;
 	}
-	hWnd = CreateWindowA(wnd_className, "F", WS_POPUP | WS_VISIBLE, 0, 0, WND_WIDTH, WND_HEIGHT, (HWND)NULL, (HMENU)NULL, (HINSTANCE)hInstance, NULL);
+#ifdef CHANGE_RESOLUTION
+	#define wndCoordsX 0
+	#define wndCoordsY 0
+	#define WND_FLAGS WS_POPUP | WS_VISIBLE
+#else
+	#define WND_FLAGS WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
+	int wndCoordsX = (savedScreenParams.dmPelsWidth - WND_WIDTH) >> 1;
+	int wndCoordsY = (savedScreenParams.dmPelsHeight - WND_HEIGHT) >> 1;
+#endif
+	hWnd = CreateWindowA(wnd_className, "", WND_FLAGS, wndCoordsX, wndCoordsY, WND_WIDTH, WND_HEIGHT, (HWND)NULL,
+		(HMENU)NULL, (HINSTANCE)hInstance, NULL);
 	if (!hWnd){
 		return 1;
 	}
@@ -179,9 +193,11 @@ int APIENTRY wWinMain(
 	HeapFree(hHeap, 0, fract_bits);
 	HeapFree(hHeap, 0, palette);
 	HeapDestroy(hHeap);
-	
+
+#ifdef CHANGE_RESOLUTION
 	ChangeDisplaySettings(&savedScreenParams, 0);
-	
+#endif
+
 	ExitProcess(0);
 
 	return 0;
