@@ -35,10 +35,10 @@ int CurrKey = 0;
 #define fract_img_k		0.0001f
 #define fract_rng		50.0f
 #define fract_iter_max	20
-#define fract_power_max	7.0f
-#define fract_power_min	1.5f
+#define fract_power_max	10.0f
+#define fract_power_min	1.7f
 
-float fract_power = 1.5f;
+float fract_power = fract_power_min;
 float fract_dpower = 0.02f;
 
 float fract_scale = 0.01f;
@@ -57,9 +57,13 @@ struct {
 
 pltClr * palette = NULL;
 
-#define R_W 17
-#define G_W 11
-#define B_W 6
+int paletteShift = 0;
+char paletteShiftDirection = 1;
+int paletteShiftSaved = 0;
+
+#define R_W 23
+#define G_W 13
+#define B_W 9
 
 
 void onDraw()
@@ -97,8 +101,9 @@ void onDraw()
 			}
 
 			float fabs_z = abs_z + 1.0f;
-			float val = fpu_ln(fabs_z);
-			unsigned long int clr_ind = fpu_f_to_i(val) % MAX_PALETTE_CLR;
+			float val = fpu_ln(fabs_z)*1.7;
+			unsigned long int clr_ind = fpu_f_to_i(val) + (paletteShift / 3);
+			clr_ind = clr_ind  % MAX_PALETTE_CLR;
 
 			fract_bits[ind] = palette[clr_ind].red;
 			fract_bits[ind + 1] = palette[clr_ind].green;
@@ -239,10 +244,18 @@ LRESULT CALLBACK WindowProc(HWND hWindow, UINT uMsg, WPARAM wParam, LPARAM lPara
 void onTimer() {
 	fract_power += fract_dpower;
 	fract_scale -= fract_dscale;
+	paletteShift+= paletteShiftDirection;
+	if (paletteShiftDirection > 0) {
+		paletteShiftSaved = paletteShift;
+	}
 
 	if (fract_power >= fract_power_max || fract_power <= fract_power_min) {
 		fract_dpower = -fract_dpower;
 		fract_dscale = -fract_dscale;
+		paletteShiftDirection *= -1;
+		if (paletteShiftDirection > 0) {
+			paletteShift = paletteShiftSaved;
+		}
 	}
 	InvalidateRect(hWnd, NULL, 0);
 }
@@ -262,8 +275,8 @@ void generatePalette()
 	float bHalfInv_mul_255 = 1.0 / bHalf * 255.0;
 
 	for (int i = 0; i < len; ++i) {
-		int redVal = (i + 1) % R_W;
-		int grenVal = (i + 4) % G_W;
+		int redVal = (i + 7) % R_W;
+		int grenVal = (i + 1) % G_W;
 		int blueVal = (i+3) % B_W;
 
 		float rVal = fpu_fabs((float)redVal - rHalf) * rHalfInv_mul_255;
